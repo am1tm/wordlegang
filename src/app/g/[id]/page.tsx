@@ -73,6 +73,18 @@ export default function GroupPage() {
         title={board.group.name}
         right={
           <>
+            <Link
+              href={`/g/${board.group.id}/chat`}
+              className="relative rounded-full bg-surface-2 p-2 text-xl leading-none"
+              aria-label={board.unread ? `Trash talk, ${board.unread} unread` : "Trash talk"}
+            >
+              💬
+              {board.unread > 0 && (
+                <span className="absolute -right-1 -top-1">
+                  <UnreadBadge count={board.unread} compact />
+                </span>
+              )}
+            </Link>
             <InviteButton code={board.group.invite_code} name={board.group.name} />
             <button className="rounded-lg p-2 text-xl text-muted" onClick={() => setMenu(!menu)} aria-label="Group menu">
               ⋯
@@ -91,20 +103,6 @@ export default function GroupPage() {
           }}
         />
       )}
-
-      <Link
-        href={`/g/${board.group.id}/chat`}
-        className="card mb-4 flex items-center justify-between gap-3 py-3 active:bg-surface-2"
-      >
-        <div>
-          <p className="font-semibold">💬 Trash talk</p>
-          <p className="text-xs text-muted">Today&apos;s chat · resets with the next Wordle</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {board.unread > 0 && <UnreadBadge count={board.unread} />}
-          <span className="text-2xl text-muted">›</span>
-        </div>
-      </Link>
 
       <nav className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-surface p-1">
         {TABS.map((t) => (

@@ -52,7 +52,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
         </Link>
         <div className="min-w-0">
           <p className="truncate font-bold leading-tight">💬 Trash talk</p>
-          <p className="truncate text-xs text-muted">{data?.group.name ?? " "}</p>
+          <p className="truncate text-xs text-muted">{data?.group?.name ?? " "}</p>
         </div>
       </header>
 
