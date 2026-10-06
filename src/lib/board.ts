@@ -24,7 +24,8 @@ export type TodayEntry = {
   at: string | null;
 };
 
-type ResultRow = { player_id: string; puzzle: number; score: number; hard: boolean; grid: string; created_at: string };
+// The Neon driver returns timestamptz columns as Date objects.
+type ResultRow = { player_id: string; puzzle: number; score: number; hard: boolean; grid: string; created_at: Date };
 
 export async function groupBoard(groupId: string, viewerId: string, today: number) {
   const [members, results] = await Promise.all([
@@ -57,7 +58,7 @@ export async function groupBoard(groupId: string, viewerId: string, today: numbe
         score: r?.score ?? null,
         hard: r?.hard ?? false,
         grid: reveal ? r.grid : null,
-        at: r?.created_at ?? null,
+        at: r ? r.created_at.toISOString() : null,
       };
     })
     .sort((a, b) => (a.score ?? 99) - (b.score ?? 99) || (a.at ?? "").localeCompare(b.at ?? ""));
