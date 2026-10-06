@@ -46,6 +46,27 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   const lastId = data?.messages.at(-1)?.id;
   const refresh = useRefresh();
   const viewport = useChatViewport();
+  const root = useRef<HTMLDivElement>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const [debug, setDebug] = useState("");
+
+  // Temporary: tap the hint line to see what iOS reports on this screen.
+  function measure() {
+    const r = (el: Element | null) => {
+      const b = el?.getBoundingClientRect();
+      return b ? `${Math.round(b.top)}–${Math.round(b.bottom)}` : "n/a";
+    };
+    const vv = window.visualViewport;
+    setDebug(
+      [
+        `window ${innerWidth}×${innerHeight} · screen ${screen.height}`,
+        `visible ${vv ? `${Math.round(vv.height)} @${Math.round(vv.offsetTop)}` : "n/a"} · scrollY ${Math.round(scrollY)}`,
+        `docEl ${document.documentElement.clientHeight} · body ${document.body.scrollHeight}`,
+        `chat ${r(root.current)} · box ${r(form.current)}`,
+        `mode ${viewport.keyboard ? "keyboard" : "normal"}`,
+      ].join("\n"),
+    );
+  }
 
   useEffect(() => {
     // Scroll only the message list. scrollIntoView would also scroll the page on iOS
@@ -76,6 +97,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   return (
     // Fixed over the page and sized to the visible viewport, escaping the page padding.
     <div
+      ref={root}
       className="fixed inset-x-0 top-0 bottom-0 z-40 mx-auto flex max-w-md flex-col bg-bg pt-[env(safe-area-inset-top)]"
       style={viewport.style}
     >
@@ -90,7 +112,9 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
       </header>
 
       <div ref={list} className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3">
-        <p className="pb-1 text-center text-xs text-muted">Today&apos;s trash talk disappears when the next Wordle drops 💨</p>
+        <p className="whitespace-pre-line pb-1 text-center text-xs text-muted" onClick={measure}>
+          {debug || "Today\u2019s trash talk disappears when the next Wordle drops 💨"}
+        </p>
         {!data && <p className="py-8 text-center text-sm text-muted">Loading…</p>}
         {data?.messages.length === 0 && (
           <p className="py-8 text-center text-sm text-muted">Nothing yet. Start the trash talk.</p>
@@ -116,6 +140,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
       </div>
 
       <form
+        ref={form}
         onSubmit={send}
         // The keyboard covers the home indicator, so its inset only applies when it's closed.
         className={`shrink-0 border-t border-line bg-bg px-4 pt-3 ${viewport.keyboard ? "pb-3" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}
