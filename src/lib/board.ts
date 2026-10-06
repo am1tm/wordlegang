@@ -1,7 +1,5 @@
 import { sql } from "./db";
-import { FAIL_SCORE, points } from "./wordle";
-
-export type Period = "week" | "month" | "all";
+import { FAIL_SCORE, points, weekStart } from "./wordle";
 
 export type MemberStats = {
   id: string;
@@ -25,32 +23,67 @@ export type TodayEntry = {
 };
 
 // The Neon driver returns timestamptz columns as Date objects.
-type ResultRow = { player_id: string; puzzle: number; score: number; hard: boolean; grid: string; created_at: Date };
+export type ResultRow = { player_id: string; puzzle: number; score: number; hard: boolean; grid: string; created_at: Date };
+export type Member = { id: string; name: string };
+export type GroupData = { members: Member[]; byPlayer: Map<string, ResultRow[]> };
 
-export async function groupBoard(groupId: string, viewerId: string, today: number) {
+export async function loadGroup(groupId: string, upTo: number): Promise<GroupData> {
   const [members, results] = await Promise.all([
-    sql<{ id: string; name: string }>`
+    sql<Member>`
       select p.id, p.name from memberships m join players p on p.id = m.player_id
       where m.group_id = ${groupId} order by m.joined_at`,
     sql<ResultRow>`
       select r.player_id, r.puzzle, r.score, r.hard, r.grid, r.created_at
       from results r join memberships m on m.player_id = r.player_id
-      where m.group_id = ${groupId} and r.puzzle <= ${today}
+      where m.group_id = ${groupId} and r.puzzle <= ${upTo}
       order by r.puzzle`,
   ]);
-
   const byPlayer = new Map<string, ResultRow[]>();
   for (const r of results) {
     const list = byPlayer.get(r.player_id) ?? [];
     list.push(r);
     byPlayer.set(r.player_id, list);
   }
+  return { members, byPlayer };
+}
 
-  const viewerPlayedToday = (byPlayer.get(viewerId) ?? []).some((r) => r.puzzle === today);
+export function resultFor(data: GroupData, playerId: string, puzzle: number) {
+  return data.byPlayer.get(playerId)?.find((r) => r.puzzle === puzzle);
+}
 
-  const todayEntries: TodayEntry[] = members
+export function everyonePlayed(data: GroupData, puzzle: number) {
+  return data.members.length > 0 && data.members.every((m) => resultFor(data, m.id, puzzle));
+}
+
+/** Per-member stats over puzzles [from, to], ranked by points then average. Streaks are as of `to`. */
+export function rangeStats(data: GroupData, from: number, to: number): MemberStats[] {
+  return data.members
     .map((m) => {
-      const r = byPlayer.get(m.id)?.find((x) => x.puzzle === today);
+      const all = (data.byPlayer.get(m.id) ?? []).filter((r) => r.puzzle <= to);
+      const rows = all.filter((r) => r.puzzle >= from);
+      const distribution = Array(7).fill(0);
+      for (const r of rows) distribution[r.score - 1]++;
+      return {
+        id: m.id,
+        name: m.name,
+        played: rows.length,
+        wins: rows.filter((r) => r.score !== FAIL_SCORE).length,
+        points: rows.reduce((s, r) => s + points(r.score), 0),
+        avg: rows.length ? rows.reduce((s, r) => s + r.score, 0) / rows.length : null,
+        ...streaks(all, to),
+        distribution,
+      };
+    })
+    .sort((a, b) => b.points - a.points || (a.avg ?? 99) - (b.avg ?? 99));
+}
+
+export async function groupBoard(groupId: string, viewerId: string, today: number) {
+  const data = await loadGroup(groupId, today);
+  const viewerPlayedToday = !!resultFor(data, viewerId, today);
+
+  const todayEntries: TodayEntry[] = data.members
+    .map((m) => {
+      const r = resultFor(data, m.id, today);
       const reveal = r && (viewerPlayedToday || m.id === viewerId);
       return {
         id: m.id,
@@ -63,34 +96,18 @@ export async function groupBoard(groupId: string, viewerId: string, today: numbe
     })
     .sort((a, b) => (a.score ?? 99) - (b.score ?? 99) || (a.at ?? "").localeCompare(b.at ?? ""));
 
-  const stats = (period: Period): MemberStats[] => {
-    const from = period === "week" ? today - 6 : period === "month" ? today - 29 : -Infinity;
-    return members
-      .map((m) => {
-        const all = byPlayer.get(m.id) ?? [];
-        const rows = all.filter((r) => r.puzzle >= from);
-        const distribution = Array(7).fill(0);
-        for (const r of rows) distribution[r.score - 1]++;
-        const wins = rows.filter((r) => r.score !== FAIL_SCORE).length;
-        return {
-          id: m.id,
-          name: m.name,
-          played: rows.length,
-          wins,
-          points: rows.reduce((s, r) => s + points(r.score), 0),
-          avg: rows.length ? rows.reduce((s, r) => s + r.score, 0) / rows.length : null,
-          ...streaks(all, today),
-          distribution,
-        };
-      })
-      .sort((a, b) => b.points - a.points || (a.avg ?? 99) - (b.avg ?? 99));
-  };
-
+  const thisWeek = weekStart(today);
   return {
     today,
     viewerPlayedToday,
+    everyonePlayedToday: everyonePlayed(data, today),
+    weekStart: thisWeek,
     todayEntries,
-    stats: { week: stats("week"), month: stats("month"), all: stats("all") },
+    stats: {
+      week: rangeStats(data, thisWeek, today),
+      month: rangeStats(data, today - 29, today),
+      all: rangeStats(data, -Infinity, today),
+    },
   };
 }
 

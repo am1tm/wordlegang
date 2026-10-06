@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Grid, HiddenGrid } from "@/components/Grid";
 import { Header } from "@/components/Header";
+import { ShareRecap } from "@/components/ShareSheet";
 import { Spinner } from "@/components/Spinner";
 import { api, ApiError, inviteUrl, todayPuzzle } from "@/lib/client";
 import { FAIL_SCORE, scoreLabel } from "@/lib/wordle";
@@ -24,13 +25,15 @@ type Board = {
   group: { id: string; name: string; invite_code: string; isOwner: boolean };
   today: number;
   viewerPlayedToday: boolean;
+  everyonePlayedToday: boolean;
+  weekStart: number;
   todayEntries: { id: string; name: string; score: number | null; hard: boolean; grid: string | null }[];
   stats: { week: Stats[]; month: Stats[]; all: Stats[] };
 };
 
 const TABS = [
   { id: "today", label: "Today" },
-  { id: "week", label: "7 days" },
+  { id: "week", label: "This week" },
   { id: "month", label: "30 days" },
   { id: "all", label: "All time" },
 ] as const;
@@ -98,7 +101,14 @@ export default function GroupPage() {
         ))}
       </nav>
 
-      {tab === "today" ? <Today board={board} /> : <Leaderboard rows={board.stats[tab]} />}
+      {tab === "today" ? (
+        <Today board={board} />
+      ) : (
+        <>
+          <RecapButton board={board} tab={tab} />
+          <Leaderboard rows={board.stats[tab]} />
+        </>
+      )}
     </>
   );
 }
@@ -109,6 +119,14 @@ function Today({ board }: { board: Board }) {
   return (
     <div className="space-y-3">
       <p className="label">Wordle {board.today.toLocaleString("en-US")}</p>
+      {board.everyonePlayedToday ? (
+        <div className="card space-y-3 border-hit/60">
+          <p className="font-semibold">🎉 Everyone&apos;s played! Share today&apos;s highlights with the gang.</p>
+          <ShareRecap path={summaryPath(board, "day")} label="Share highlights" primary />
+        </div>
+      ) : (
+        played.length > 0 && <p className="text-xs text-muted">Highlights to share unlock once everyone has played.</p>
+      )}
       {!board.viewerPlayedToday && played.length > 0 && (
         <p className="text-sm text-muted">Grids are hidden until you post your own result.</p>
       )}
@@ -141,6 +159,32 @@ function Today({ board }: { board: Board }) {
   );
 }
 
+function summaryPath(board: Board, kind: "day" | "week" | "lastweek" | "all") {
+  return `/api/groups/${board.group.id}/summary?kind=${kind}&today=${board.today}`;
+}
+
+function RecapButton({ board, tab }: { board: Board; tab: Exclude<Tab, "today"> }) {
+  if (tab === "month") return null;
+  if (tab === "all") {
+    return (
+      <div className="mb-4">
+        <ShareRecap path={summaryPath(board, "all")} label="📤 Share all-time standings" />
+      </div>
+    );
+  }
+  // Weeks run Mon–Sun; this week's recap is ready on Sunday once everyone has played.
+  const weekDone = board.today === board.weekStart + 6 && board.everyonePlayedToday;
+  return (
+    <div className="mb-4">
+      <ShareRecap
+        path={summaryPath(board, weekDone ? "week" : "lastweek")}
+        label={weekDone ? "🎉 Share this week's recap" : "📤 Share last week's recap"}
+        primary={weekDone}
+      />
+    </div>
+  );
+}
+
 function medal(index: number, score: number, played: { score: number | null }[]) {
   if (score === FAIL_SCORE) return "💀";
   const rank = played.findIndex((p) => p.score === score); // ties share a medal
@@ -159,14 +203,14 @@ function Leaderboard({ rows }: { rows: Stats[] }) {
         <span className="text-right">Avg</span>
         <span className="text-right">🔥</span>
       </div>
-      {rows.map((r, i) => (
+      {rows.map((r) => (
         <button
           key={r.id}
           onClick={() => setOpen(open === r.id ? null : r.id)}
           className="card block w-full py-3 text-left active:bg-surface-2"
         >
           <div className="grid grid-cols-[2rem_1fr_3.5rem_3rem_3rem] items-center">
-            <span className="font-bold text-muted">{["🥇", "🥈", "🥉"][i] ?? i + 1}</span>
+            <span className="font-bold text-muted">{standing(rows, r)}</span>
             <span className="truncate font-semibold">{r.name}</span>
             <span className="text-right text-lg font-bold">{r.points}</span>
             <span className="text-right text-muted">{r.avg ? r.avg.toFixed(2) : "–"}</span>
@@ -181,6 +225,12 @@ function Leaderboard({ rows }: { rows: Stats[] }) {
       </p>
     </div>
   );
+}
+
+// Players level on points and average share a medal.
+function standing(rows: Stats[], r: Stats) {
+  const rank = rows.findIndex((o) => o.points === r.points && o.avg === r.avg);
+  return ["🥇", "🥈", "🥉"][rank] ?? rank + 1;
 }
 
 function Distribution({ stats }: { stats: Stats }) {

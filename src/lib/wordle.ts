@@ -99,3 +99,28 @@ export function scoreLabel(score: number) {
 export function points(score: number) {
   return score === FAIL_SCORE ? 0 : 7 - score;
 }
+
+/** Calendar date a puzzle was published on (as a UTC-midnight Date). */
+export function puzzleDate(puzzle: number) {
+  return new Date(EPOCH_UTC + puzzle * DAY_MS);
+}
+
+/** First puzzle (Monday) of the Mon–Sun week containing `puzzle`. */
+export function weekStart(puzzle: number) {
+  const mondayBased = (puzzleDate(puzzle).getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  return puzzle - mondayBased;
+}
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Mon 28 Sep" by default; `weekday: "long"` for "Monday 28 Sep", `"only"` for "Monday", `year` appends it. */
+export function formatPuzzleDay(puzzle: number, opts: { weekday?: "short" | "long" | "only" | "none"; year?: boolean } = {}) {
+  const d = puzzleDate(puzzle);
+  const day = DAYS[d.getUTCDay()];
+  const { weekday = "short", year = false } = opts;
+  if (weekday === "only") return day;
+  const date = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${year ? ` ${d.getUTCFullYear()}` : ""}`;
+  if (weekday === "none") return date;
+  return `${weekday === "long" ? day : day.slice(0, 3)} ${date}`;
+}
