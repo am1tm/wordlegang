@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig, type SWRConfiguration } from "swr";
 import { puzzleForDate } from "./wordle";
 
 const KEY_STORAGE = "wg.key";
@@ -87,11 +87,12 @@ export const useHydrated = () => useSyncExternalStore(hydratedSubscribe, () => t
  * Cached GET for the current player (stale-while-revalidate, see DataProvider).
  * The player key is part of the cache key, so switching players never shows stale data.
  */
-export function useApi<T>(path: string | null) {
+export function useApi<T>(path: string | null, config?: SWRConfiguration<T, Error>) {
   const hydrated = useHydrated();
   const key = usePlayerKey();
   return useSWR<T, Error, [string, string] | null>(hydrated && key && path ? [path, key] : null, ([p, k]) =>
     api<T>(p, { key: k }),
+    config,
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Chat } from "@/components/Chat";
 import { Grid, HiddenGrid } from "@/components/Grid";
 import { Header } from "@/components/Header";
 import { ShareRecap } from "@/components/ShareSheet";
@@ -33,9 +34,10 @@ type Board = {
 
 const TABS = [
   { id: "today", label: "Today" },
-  { id: "week", label: "This week" },
+  { id: "week", label: "Week" },
   { id: "month", label: "30 days" },
   { id: "all", label: "All time" },
+  { id: "chat", label: "Trash talk" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -88,12 +90,12 @@ export default function GroupPage() {
 
       <InviteCard code={board.group.invite_code} name={board.group.name} />
 
-      <nav className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-surface p-1">
+      <nav className="mb-4 grid grid-cols-[1fr_0.9fr_1.1fr_1.1fr_1.3fr] gap-1 rounded-xl bg-surface p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`rounded-lg py-2 text-sm font-semibold ${tab === t.id ? "bg-surface-2 text-fg" : "text-muted"}`}
+            className={`whitespace-nowrap rounded-lg py-2 text-[13px] font-semibold ${tab === t.id ? "bg-surface-2 text-fg" : "text-muted"}`}
           >
             {t.label}
           </button>
@@ -102,6 +104,8 @@ export default function GroupPage() {
 
       {tab === "today" ? (
         <Today board={board} />
+      ) : tab === "chat" ? (
+        <Chat groupId={board.group.id} today={board.today} />
       ) : (
         <>
           <RecapButton board={board} tab={tab} />
@@ -162,7 +166,7 @@ function summaryPath(board: Board, kind: "day" | "week" | "lastweek" | "all") {
   return `/api/groups/${board.group.id}/summary?kind=${kind}&today=${board.today}`;
 }
 
-function RecapButton({ board, tab }: { board: Board; tab: Exclude<Tab, "today"> }) {
+function RecapButton({ board, tab }: { board: Board; tab: Exclude<Tab, "today" | "chat"> }) {
   if (tab === "month") return null;
   if (tab === "all") {
     return (

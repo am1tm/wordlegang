@@ -51,3 +51,14 @@ create table if not exists notification_log (
   sent_at timestamptz not null default now(),
   primary key (player_id, puzzle, slot)
 );
+
+-- Daily group chat: messages belong to a puzzle day and are purged soon after.
+create table if not exists messages (
+  id bigserial primary key,
+  group_id text not null references groups(id) on delete cascade,
+  player_id text not null references players(id) on delete cascade,
+  puzzle integer not null,
+  body text not null check (char_length(body) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists messages_group_puzzle_idx on messages(group_id, puzzle, id);
