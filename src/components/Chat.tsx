@@ -1,13 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api, useApi, useRefresh } from "@/lib/client";
 
 type Message = { id: string; body: string; at: string; name: string; mine: boolean };
 type ChatData = { puzzle: number; group: { id: string; name: string }; messages: Message[] };
 
 const POLL_MS = 4000;
+
+// The visible viewport (shrinks when the on-screen keyboard opens). iOS keeps the
+// layout viewport full height and slides the page instead, which leaves a gap
+// under fixed elements, so the chat sizes itself to this instead of 100dvh.
+function subscribeViewport(cb: () => void) {
+  const vv = window.visualViewport;
+  vv?.addEventListener("resize", cb);
+  vv?.addEventListener("scroll", cb);
+  return () => {
+    vv?.removeEventListener("resize", cb);
+    vv?.removeEventListener("scroll", cb);
+  };
+}
+const viewportSnapshot = () => {
+  const vv = window.visualViewport;
+  return vv ? `${Math.round(vv.height)}:${Math.round(vv.offsetTop)}` : "";
+};
+
+function useVisibleViewport() {
+  const snap = useSyncExternalStore(subscribeViewport, viewportSnapshot, () => "");
+  if (!snap) return undefined;
+  const [height, top] = snap.split(":").map(Number);
+  return { height, transform: `translateY(${top}px)` };
+}
 
 /** Full-screen Trash talk room: header on top, messages scroll, composer pinned to the bottom. */
 export function Chat({ groupId, today }: { groupId: string; today: number }) {
@@ -18,6 +42,17 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   const bottom = useRef<HTMLDivElement>(null);
   const lastId = data?.messages.at(-1)?.id;
   const refresh = useRefresh();
+  const viewportStyle = useVisibleViewport();
+
+  // Lock the page behind the chat so iOS can't scroll it and open gaps.
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -44,8 +79,11 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   }
 
   return (
-    // Fixed to the viewport (dvh tracks the on-screen keyboard), escaping the page padding.
-    <div className="fixed inset-x-0 top-0 z-40 mx-auto flex h-[100dvh] max-w-md flex-col bg-bg pt-[env(safe-area-inset-top)]">
+    // Fixed over the page and sized to the visible viewport, escaping the page padding.
+    <div
+      className="fixed inset-x-0 top-0 bottom-0 z-40 mx-auto flex max-w-md flex-col bg-bg pt-[env(safe-area-inset-top)]"
+      style={viewportStyle}
+    >
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4">
         <Link href={`/g/${groupId}`} className="-ml-2 rounded-lg px-2 py-1 text-2xl text-muted" aria-label="Back">
           ‹
@@ -85,7 +123,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
 
       <form
         onSubmit={send}
-        className="shrink-0 border-t border-line bg-bg px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3"
+        className="shrink-0 border-t border-line bg-bg px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"
       >
         {error && <p className="mb-2 text-sm text-danger">{error}</p>}
         <div className="flex gap-2">
