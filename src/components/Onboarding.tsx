@@ -25,7 +25,6 @@ export function Onboarding({ inviteCode, onDone }: { inviteCode?: string; onDone
         method: "POST",
         json: { name, tz: localTz(), inviteCode: inviteCode ?? getPendingInvite() },
       });
-      setKey(res.key);
       setPendingInvite(null);
       setCreated(res);
     } catch (err) {
@@ -40,19 +39,19 @@ export function Onboarding({ inviteCode, onDone }: { inviteCode?: string; onDone
     setBusy(true);
     setError("");
     const key = normaliseKey(keyInput);
-    setKey(key);
     try {
-      await api("/api/me");
+      await api("/api/me", { key });
       const code = inviteCode ?? getPendingInvite();
       let groupId: string | undefined;
       if (code) {
-        groupId = (await api<{ group: { id: string } }>("/api/join", { method: "POST", json: { code } }).catch(() => null))
-          ?.group.id;
+        groupId = (
+          await api<{ group: { id: string } }>("/api/join", { method: "POST", json: { code }, key }).catch(() => null)
+        )?.group.id;
         setPendingInvite(null);
       }
+      setKey(key);
       onDone(groupId);
     } catch (err) {
-      setKey(null);
       setError(err instanceof ApiError && err.status === 401 ? "That key doesn't match any player." : (err as Error).message);
     } finally {
       setBusy(false);
@@ -77,7 +76,13 @@ export function Onboarding({ inviteCode, onDone }: { inviteCode?: string; onDone
           </p>
           <CopyButton text={created.key} label="Copy key" className="btn-ghost w-full" />
         </div>
-        <button className="btn-primary w-full" onClick={() => onDone(created.group?.id)}>
+        <button
+          className="btn-primary w-full"
+          onClick={() => {
+            setKey(created.key);
+            onDone(created.group?.id);
+          }}
+        >
           Continue
         </button>
       </div>

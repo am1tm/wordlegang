@@ -10,11 +10,12 @@ import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Onboarding } from "@/components/Onboarding";
 import { PasteResult } from "@/components/PasteResult";
 import { Spinner } from "@/components/Spinner";
-import { api, isIOS, useBrowser, useMe } from "@/lib/client";
+import { api, isIOS, useBrowser, useMe, useRefreshAll } from "@/lib/client";
 import { scoreLabel } from "@/lib/wordle";
 
 export default function Home() {
-  const { me, reload } = useMe();
+  const { me } = useMe();
+  const refreshAll = useRefreshAll();
   const router = useRouter();
   // Set by /share after posting. Safe as initial state: the first render is always the spinner.
   const [toast, setToast] = useState(() =>
@@ -27,7 +28,7 @@ export default function Home() {
 
   if (me === undefined) return <Spinner />;
   if (me === null) {
-    return <Onboarding onDone={(groupId) => (groupId ? router.push(`/g/${groupId}`) : reload())} />;
+    return <Onboarding onDone={(groupId) => groupId && router.push(`/g/${groupId}`)} />;
   }
 
   return (
@@ -66,7 +67,7 @@ export default function Home() {
             <PasteResult
               onPosted={(msg) => {
                 setToast(msg);
-                reload();
+                refreshAll();
               }}
             />
             <HowToShare />
@@ -119,6 +120,7 @@ function HowToShare() {
 }
 
 function GroupActions({ onJoined }: { onJoined: (id: string) => void }) {
+  const refreshAll = useRefreshAll();
   const [mode, setMode] = useState<"idle" | "create" | "join">("idle");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -133,6 +135,7 @@ function GroupActions({ onJoined }: { onJoined: (id: string) => void }) {
         mode === "create"
           ? await api<{ group: { id: string } }>("/api/groups", { method: "POST", json: { name: value } })
           : await api<{ group: { id: string } }>("/api/join", { method: "POST", json: { code: value } });
+      refreshAll();
       onJoined(res.group.id);
     } catch (err) {
       setError((err as Error).message);

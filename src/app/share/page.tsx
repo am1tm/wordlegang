@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import { submitResult } from "@/components/PasteResult";
-import { getKey, useBrowser } from "@/lib/client";
+import { getKey, useBrowser, useRefreshAll } from "@/lib/client";
 
 // Android share target: Wordle → Share → WordleGang lands here with ?text=…
 export default function SharePage() {
   const router = useRouter();
+  const refreshAll = useRefreshAll();
   const [submitError, setSubmitError] = useState("");
   const hasKey = useBrowser(() => !!getKey(), true);
   const started = useRef(false);
@@ -21,9 +22,12 @@ export default function SharePage() {
     const params = new URLSearchParams(location.search);
     const text = ["title", "text", "url"].map((k) => params.get(k) ?? "").join("\n");
     submitResult(text)
-      .then((r) => router.replace(`/?posted=${encodeURIComponent(r.message)}`))
+      .then((r) => {
+        refreshAll();
+        router.replace(`/?posted=${encodeURIComponent(r.message)}`);
+      })
       .catch((e) => setSubmitError(e.message));
-  }, [router]);
+  }, [router, refreshAll]);
 
   if (!error) return <Spinner />;
   return (

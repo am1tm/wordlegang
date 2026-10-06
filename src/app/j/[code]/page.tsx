@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Onboarding } from "@/components/Onboarding";
 import { Spinner } from "@/components/Spinner";
-import { api, isIOS, isStandalone, setPendingInvite, useBrowser, useMe } from "@/lib/client";
+import { api, isIOS, isStandalone, setPendingInvite, useBrowser, useMe, useRefreshAll } from "@/lib/client";
 import { normaliseInviteCode } from "@/lib/ids";
 
 type Invite = { id: string; name: string; member_count: number };
@@ -15,6 +15,7 @@ export default function JoinPage() {
   const code = normaliseInviteCode(rawCode);
   const router = useRouter();
   const { me } = useMe();
+  const refreshAll = useRefreshAll();
   const [invite, setInvite] = useState<Invite | null | undefined>(undefined);
   const iosBrowser = useBrowser(() => isIOS() && !isStandalone(), false);
   const [skipInstall, setSkipInstall] = useState(false);
@@ -60,6 +61,7 @@ export default function JoinPage() {
             setBusy(true);
             const r = await api<{ group: { id: string } }>("/api/join", { method: "POST", json: { code } });
             setPendingInvite(null);
+            refreshAll();
             router.replace(`/g/${r.group.id}`);
           }}
         >

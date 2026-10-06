@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+import useSWR, { useSWRConfig } from "swr";
 import { puzzleForDate } from "./wordle";
 
 const KEY_STORAGE = "wg.key";
@@ -20,8 +21,18 @@ function storageSet(k: string, v: string | null) {
   } catch {}
 }
 
+// The player key is a tiny external store so screens react when it's set or switched.
+const keyListeners = new Set<() => void>();
 export const getKey = () => storageGet(KEY_STORAGE);
-export const setKey = (key: string | null) => storageSet(KEY_STORAGE, key);
+export function setKey(key: string | null) {
+  storageSet(KEY_STORAGE, key);
+  keyListeners.forEach((l) => l());
+}
+function subscribeKey(listener: () => void) {
+  keyListeners.add(listener);
+  return () => keyListeners.delete(listener);
+}
+export const usePlayerKey = () => useSyncExternalStore(subscribeKey, getKey, () => null);
 export const getPendingInvite = () => storageGet(INVITE_STORAGE);
 export const setPendingInvite = (code: string | null) => storageSet(INVITE_STORAGE, code);
 
@@ -34,9 +45,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T = unknown>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
+/** Fetch JSON from our API as the current player (or as `init.key`, e.g. to verify a key before saving it). */
+export async function api<T = unknown>(
+  path: string,
+  init: RequestInit & { json?: unknown; key?: string } = {},
+): Promise<T> {
   const headers = new Headers(init.headers);
-  const key = getKey();
+  const key = init.key ?? getKey();
   if (key) headers.set("authorization", `Bearer ${key}`);
   if (init.json !== undefined) headers.set("content-type", "application/json");
   const res = await fetch(path, {
@@ -64,28 +79,36 @@ export type Me = {
   pushDevices: number;
 };
 
-/** Loads the current player. `me` is undefined while loading, null when there's no (valid) key. */
-export function useMe() {
-  const [me, setMe] = useState<Me | null | undefined>(undefined);
-  const reload = useCallback(() => loadMe().then(setMe), []);
-  useEffect(() => {
-    let cancelled = false;
-    loadMe().then((value) => !cancelled && setMe(value));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return { me, reload };
+const hydratedSubscribe = () => () => {};
+/** False during SSR and hydration, true afterwards, so cached data never causes a hydration mismatch. */
+export const useHydrated = () => useSyncExternalStore(hydratedSubscribe, () => true, () => false);
+
+/**
+ * Cached GET for the current player (stale-while-revalidate, see DataProvider).
+ * The player key is part of the cache key, so switching players never shows stale data.
+ */
+export function useApi<T>(path: string | null) {
+  const hydrated = useHydrated();
+  const key = usePlayerKey();
+  return useSWR<T, Error, [string, string] | null>(hydrated && key && path ? [path, key] : null, ([p, k]) =>
+    api<T>(p, { key: k }),
+  );
 }
 
-async function loadMe(): Promise<Me | null> {
-  if (!getKey()) return null;
-  try {
-    return await api<Me>(`/api/me?tz=${encodeURIComponent(localTz())}`);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 401) return null;
-    throw err;
-  }
+/** Revalidate every cached screen, e.g. after posting a result or joining a group. */
+export function useRefreshAll() {
+  const { mutate } = useSWRConfig();
+  return useCallback(() => mutate(() => true), [mutate]);
+}
+
+/** Current player. `me` is undefined while loading, null when there's no (valid) key. */
+export function useMe() {
+  const hydrated = useHydrated();
+  const key = usePlayerKey();
+  const { data, error, mutate } = useApi<Me>(`/api/me?tz=${encodeURIComponent(localTz())}`);
+  const unauthorized = error instanceof ApiError && error.status === 401;
+  const me = !hydrated ? undefined : !key || unauthorized ? null : data;
+  return { me, reload: useCallback(() => mutate(), [mutate]) };
 }
 
 const noSubscribe = () => () => {};

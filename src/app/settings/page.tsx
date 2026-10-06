@@ -203,13 +203,12 @@ function KeySection() {
 
   async function switchKey(e: React.FormEvent) {
     e.preventDefault();
-    const previous = key;
-    setKey(normaliseKey(input));
+    const next = normaliseKey(input);
     try {
-      await api("/api/me");
+      await api("/api/me", { key: next });
+      setKey(next);
       router.replace("/");
     } catch (err) {
-      setKey(previous);
       setError(err instanceof ApiError && err.status === 401 ? "That key doesn't match any player." : (err as Error).message);
     }
   }

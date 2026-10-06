@@ -1,12 +1,12 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Grid, HiddenGrid } from "@/components/Grid";
 import { Header } from "@/components/Header";
 import { ShareRecap } from "@/components/ShareSheet";
 import { Spinner } from "@/components/Spinner";
-import { api, ApiError, inviteUrl, todayPuzzle } from "@/lib/client";
+import { api, ApiError, inviteUrl, todayPuzzle, useApi, useRefreshAll } from "@/lib/client";
 import { FAIL_SCORE, scoreLabel } from "@/lib/wordle";
 
 type Stats = {
@@ -42,26 +42,16 @@ type Tab = (typeof TABS)[number]["id"];
 export default function GroupPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [board, setBoard] = useState<Board | null>(null);
-  const [error, setError] = useState("");
+  const { data: board, error: loadError, mutate } = useApi<Board>(`/api/groups/${id}?today=${todayPuzzle()}`);
+  const refreshAll = useRefreshAll();
+  const unauthorized = loadError instanceof ApiError && loadError.status === 401;
+  const error = board || unauthorized ? "" : (loadError?.message ?? "");
   const [tab, setTab] = useState<Tab>("today");
   const [menu, setMenu] = useState(false);
 
-  const load = useCallback(
-    () =>
-      api<Board>(`/api/groups/${id}?today=${todayPuzzle()}`).then(setBoard, (err) => {
-        if (err instanceof ApiError && err.status === 401) router.replace("/");
-        else setError((err as Error).message);
-      }),
-    [id, router],
-  );
-
   useEffect(() => {
-    load();
-    const onFocus = () => document.visibilityState === "visible" && load();
-    document.addEventListener("visibilitychange", onFocus);
-    return () => document.removeEventListener("visibilitychange", onFocus);
-  }, [load]);
+    if (unauthorized) router.replace("/");
+  }, [unauthorized, router]);
 
   if (error) {
     return (
@@ -85,7 +75,16 @@ export default function GroupPage() {
         }
       />
 
-      {menu && <GroupMenu board={board} onChange={load} onLeft={() => router.replace("/")} />}
+      {menu && (
+        <GroupMenu
+          board={board}
+          onChange={() => mutate()}
+          onLeft={() => {
+            refreshAll();
+            router.replace("/");
+          }}
+        />
+      )}
 
       <InviteCard code={board.group.invite_code} name={board.group.name} />
 
