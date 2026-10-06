@@ -28,6 +28,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
+body {
+  /* No rubber-band bounce: the installed app has no pull-to-refresh, and the bounce
+     drags fixed screens like the chat around. */
+  overscroll-behavior: none;
+}
+
 html {
   color-scheme: dark;
   -webkit-tap-highlight-color: transparent;
