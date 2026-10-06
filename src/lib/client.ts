@@ -72,10 +72,11 @@ export type Me = {
     notify_midnight: boolean;
     notify_morning: boolean;
     notify_afternoon: boolean;
+    notify_chat: boolean;
   };
   today: number;
   todayResult: { puzzle: number; score: number; hard: boolean; grid: string } | null;
-  groups: { id: string; name: string; invite_code: string; member_count: number; played_today: number }[];
+  groups: { id: string; name: string; invite_code: string; member_count: number; played_today: number; unread: number }[];
   pushDevices: number;
 };
 
@@ -93,6 +94,16 @@ export function useApi<T>(path: string | null, config?: SWRConfiguration<T, Erro
   return useSWR<T, Error, [string, string] | null>(hydrated && key && path ? [path, key] : null, ([p, k]) =>
     api<T>(p, { key: k }),
     config,
+  );
+}
+
+/** Revalidate cached screens whose path passes `match` (all of them by default). */
+export function useRefresh() {
+  const { mutate } = useSWRConfig();
+  return useCallback(
+    (match: (path: string) => boolean = () => true) =>
+      mutate((key) => Array.isArray(key) && typeof key[0] === "string" && match(key[0])),
+    [mutate],
   );
 }
 

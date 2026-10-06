@@ -20,6 +20,11 @@ async function notify(req: Request) {
   if (!slot || !(slot in SLOTS)) return Response.json({ error: "Unknown slot" }, { status: 400 });
   const column = SLOTS[slot as Slot];
 
+  if (slot === "midnight") {
+    // New Wordle day: clear every group's Trash talk older than yesterday's puzzle.
+    await sql`delete from messages where puzzle < ${puzzleForDate(new Date(), "Asia/Kolkata") - 1}`;
+  }
+
   const now = new Date();
   const players = await sql<PlayerRow & Record<string, boolean>>`
     select p.id, p.tz, p.notify_midnight, p.notify_morning, p.notify_afternoon

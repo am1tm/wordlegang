@@ -18,7 +18,9 @@ export const GET = handler(async (req: Request) => {
       select g.id, g.name, g.invite_code,
         (select count(*)::int from memberships x where x.group_id = g.id) as member_count,
         (select count(*)::int from memberships x join results r on r.player_id = x.player_id
-          where x.group_id = g.id and r.puzzle = ${today}) as played_today
+          where x.group_id = g.id and r.puzzle = ${today}) as played_today,
+        (select count(*)::int from messages msg where msg.group_id = g.id and msg.puzzle = ${today}
+          and msg.player_id <> ${player.id} and msg.id > m.chat_read_id) as unread
       from memberships m join groups g on g.id = m.group_id
       where m.player_id = ${player.id}
       order by m.joined_at`,
@@ -47,8 +49,9 @@ export const PATCH = handler(async (req: Request) => {
       tz = ${tz},
       notify_midnight = ${flag(body.notify_midnight, player.notify_midnight)},
       notify_morning = ${flag(body.notify_morning, player.notify_morning)},
-      notify_afternoon = ${flag(body.notify_afternoon, player.notify_afternoon)}
+      notify_afternoon = ${flag(body.notify_afternoon, player.notify_afternoon)},
+      notify_chat = ${flag(body.notify_chat, player.notify_chat)}
     where id = ${player.id}
-    returning id, name, tz, notify_midnight, notify_morning, notify_afternoon`;
+    returning id, name, tz, notify_midnight, notify_morning, notify_afternoon, notify_chat`;
   return Response.json({ player: rows[0] });
 });

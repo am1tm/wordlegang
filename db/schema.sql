@@ -62,3 +62,8 @@ create table if not exists messages (
   created_at timestamptz not null default now()
 );
 create index if not exists messages_group_puzzle_idx on messages(group_id, puzzle, id);
+
+-- Trash talk read state: last message id seen / notified about, per member.
+alter table memberships add column if not exists chat_read_id bigint not null default 0;
+alter table memberships add column if not exists chat_notified_id bigint not null default 0;
+alter table players add column if not exists notify_chat boolean not null default true;

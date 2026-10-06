@@ -62,6 +62,7 @@ const SLOTS = [
   { key: "notify_midnight", label: "New Wordle is out", time: "12:15 AM" },
   { key: "notify_morning", label: "Morning nudge if you haven't played", time: "8:30 AM" },
   { key: "notify_afternoon", label: "Afternoon reminder if you haven't played", time: "1:30 PM" },
+  { key: "notify_chat", label: "New Trash talk messages, batched every 10 min (not 11 PM–8 AM)", time: "Trash talk" },
 ] as const;
 
 function NotificationsSection({ me, onSaved }: { me: Me; onSaved: () => void }) {

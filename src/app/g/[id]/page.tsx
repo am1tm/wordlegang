@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Chat } from "@/components/Chat";
 import { Grid, HiddenGrid } from "@/components/Grid";
 import { Header } from "@/components/Header";
 import { ShareRecap } from "@/components/ShareSheet";
 import { Spinner } from "@/components/Spinner";
+import { UnreadBadge } from "@/components/UnreadBadge";
 import { api, ApiError, inviteUrl, todayPuzzle, useApi, useRefreshAll } from "@/lib/client";
 import { FAIL_SCORE, scoreLabel } from "@/lib/wordle";
 
@@ -24,6 +25,7 @@ type Stats = {
 
 type Board = {
   group: { id: string; name: string; invite_code: string; isOwner: boolean };
+  unread: number;
   today: number;
   viewerPlayedToday: boolean;
   everyonePlayedToday: boolean;
@@ -34,10 +36,9 @@ type Board = {
 
 const TABS = [
   { id: "today", label: "Today" },
-  { id: "week", label: "Week" },
+  { id: "week", label: "This week" },
   { id: "month", label: "30 days" },
   { id: "all", label: "All time" },
-  { id: "chat", label: "Trash talk" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -71,9 +72,12 @@ export default function GroupPage() {
         back="/"
         title={board.group.name}
         right={
-          <button className="rounded-lg p-2 text-xl text-muted" onClick={() => setMenu(!menu)} aria-label="Group menu">
-            ⋯
-          </button>
+          <>
+            <InviteButton code={board.group.invite_code} name={board.group.name} />
+            <button className="rounded-lg p-2 text-xl text-muted" onClick={() => setMenu(!menu)} aria-label="Group menu">
+              ⋯
+            </button>
+          </>
         }
       />
 
@@ -88,14 +92,26 @@ export default function GroupPage() {
         />
       )}
 
-      <InviteCard code={board.group.invite_code} name={board.group.name} />
+      <Link
+        href={`/g/${board.group.id}/chat`}
+        className="card mb-4 flex items-center justify-between gap-3 py-3 active:bg-surface-2"
+      >
+        <div>
+          <p className="font-semibold">💬 Trash talk</p>
+          <p className="text-xs text-muted">Today&apos;s chat · resets with the next Wordle</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {board.unread > 0 && <UnreadBadge count={board.unread} />}
+          <span className="text-2xl text-muted">›</span>
+        </div>
+      </Link>
 
-      <nav className="mb-4 grid grid-cols-[1fr_0.9fr_1.1fr_1.1fr_1.3fr] gap-1 rounded-xl bg-surface p-1">
+      <nav className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-surface p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`whitespace-nowrap rounded-lg py-2 text-[13px] font-semibold ${tab === t.id ? "bg-surface-2 text-fg" : "text-muted"}`}
+            className={`whitespace-nowrap rounded-lg py-2 text-sm font-semibold ${tab === t.id ? "bg-surface-2 text-fg" : "text-muted"}`}
           >
             {t.label}
           </button>
@@ -104,8 +120,6 @@ export default function GroupPage() {
 
       {tab === "today" ? (
         <Today board={board} />
-      ) : tab === "chat" ? (
-        <Chat groupId={board.group.id} today={board.today} />
       ) : (
         <>
           <RecapButton board={board} tab={tab} />
@@ -166,7 +180,7 @@ function summaryPath(board: Board, kind: "day" | "week" | "lastweek" | "all") {
   return `/api/groups/${board.group.id}/summary?kind=${kind}&today=${board.today}`;
 }
 
-function RecapButton({ board, tab }: { board: Board; tab: Exclude<Tab, "today" | "chat"> }) {
+function RecapButton({ board, tab }: { board: Board; tab: Exclude<Tab, "today"> }) {
   if (tab === "month") return null;
   if (tab === "all") {
     return (
@@ -259,11 +273,11 @@ function Distribution({ stats }: { stats: Stats }) {
   );
 }
 
-function InviteCard({ code, name }: { code: string; name: string }) {
+function InviteButton({ code, name }: { code: string; name: string }) {
   const [copied, setCopied] = useState(false);
   async function share() {
     const url = inviteUrl(code);
-    const text = `Join "${name}" on WordleGang and post your daily Wordle 🟩`;
+    const text = `Join "${name}" on WordleGang and post your daily Wordle 🟩 (code ${code})`;
     if (navigator.share) {
       try {
         return await navigator.share({ title: "WordleGang", text, url });
@@ -276,15 +290,9 @@ function InviteCard({ code, name }: { code: string; name: string }) {
     setTimeout(() => setCopied(false), 1500);
   }
   return (
-    <div className="card mb-4 flex items-center justify-between gap-3">
-      <div>
-        <p className="label">Invite code</p>
-        <p className="font-mono text-lg tracking-widest">{code}</p>
-      </div>
-      <button className="btn-primary px-5" onClick={share}>
-        {copied ? "Copied ✓" : "Invite"}
-      </button>
-    </div>
+    <button className="rounded-full bg-hit px-3.5 py-1.5 text-sm font-semibold text-white" onClick={share}>
+      {copied ? "Copied ✓" : "＋ Invite"}
+    </button>
   );
 }
 
@@ -292,6 +300,10 @@ function GroupMenu({ board, onChange, onLeft }: { board: Board; onChange: () => 
   const [confirmLeave, setConfirmLeave] = useState(false);
   return (
     <div className="card mb-4 space-y-2">
+      <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3">
+        <span className="label">Invite code</span>
+        <span className="font-mono text-lg tracking-widest">{board.group.invite_code}</span>
+      </div>
       {board.group.isOwner && (
         <button
           className="btn-ghost w-full"

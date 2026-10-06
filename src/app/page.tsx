@@ -10,6 +10,7 @@ import { NotificationPrompt } from "@/components/NotificationPrompt";
 import { Onboarding } from "@/components/Onboarding";
 import { PasteResult } from "@/components/PasteResult";
 import { Spinner } from "@/components/Spinner";
+import { UnreadBadge } from "@/components/UnreadBadge";
 import { api, isIOS, useBrowser, useMe, useRefreshAll } from "@/lib/client";
 import { scoreLabel } from "@/lib/wordle";
 
@@ -25,6 +26,8 @@ export default function Home() {
   useEffect(() => {
     if (location.search.includes("posted=")) history.replaceState(null, "", "/");
   }, []);
+
+  useAppBadge(me ? me.groups.reduce((sum, g) => sum + g.unread, 0) : null);
 
   if (me === undefined) return <Spinner />;
   if (me === null) {
@@ -64,6 +67,15 @@ export default function Home() {
           </div>
         ) : (
           <>
+            {/* On phones with the NYT Games app installed this link usually opens the app. */}
+            <a
+              className="btn-ghost w-full"
+              href="https://www.nytimes.com/games/wordle/index.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🟩 Play today&apos;s Wordle
+            </a>
             <PasteResult
               onPosted={(msg) => {
                 setToast(msg);
@@ -92,13 +104,24 @@ export default function Home() {
                 {g.played_today}/{g.member_count} played today
               </p>
             </div>
-            <span className="text-2xl text-muted">›</span>
+            <div className="flex items-center gap-3">
+              {g.unread > 0 && <UnreadBadge count={g.unread} />}
+              <span className="text-2xl text-muted">›</span>
+            </div>
           </Link>
         ))}
         <GroupActions onJoined={(id) => router.push(`/g/${id}`)} />
       </section>
     </>
   );
+}
+
+/** Mirror the unread total on the installed app's icon, where supported. */
+function useAppBadge(total: number | null) {
+  useEffect(() => {
+    if (total === null || !("setAppBadge" in navigator)) return;
+    (total > 0 ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {});
+  }, [total]);
 }
 
 function HowToShare() {

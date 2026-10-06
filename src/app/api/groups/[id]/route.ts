@@ -1,5 +1,6 @@
 import { handler, readJson, requirePlayer } from "@/lib/auth";
 import { groupBoard } from "@/lib/board";
+import { unreadCount } from "@/lib/chat";
 import { sql } from "@/lib/db";
 import { requireMembership } from "@/lib/groups";
 import { newInviteCode } from "@/lib/ids";
@@ -18,6 +19,7 @@ export const GET = handler(async (req: Request, { params }: Ctx) => {
 
   return Response.json({
     group: { id: group.id, name: group.name, invite_code: group.invite_code, isOwner: group.created_by === player.id },
+    unread: await unreadCount(group.id, player.id, today),
     ...(await groupBoard(group.id, player.id, today)),
   });
 });

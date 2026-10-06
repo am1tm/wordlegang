@@ -3,7 +3,7 @@ import { sql } from "./db";
 
 let configured = false;
 
-export type PushPayload = { title: string; body: string; url?: string; tag?: string };
+export type PushPayload = { title: string; body: string; url?: string; tag?: string; badge?: number };
 
 /** Send to every device of a player; prunes subscriptions the push service has expired. */
 export async function pushToPlayer(playerId: string, payload: PushPayload) {

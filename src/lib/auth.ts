@@ -9,6 +9,7 @@ export type Player = {
   notify_midnight: boolean;
   notify_morning: boolean;
   notify_afternoon: boolean;
+  notify_chat: boolean;
 };
 
 export function hashKey(key: string) {
@@ -18,7 +19,7 @@ export function hashKey(key: string) {
 export async function playerForKey(key: string | null | undefined): Promise<Player | null> {
   if (!key) return null;
   const rows = await sql<Player>`
-    select id, name, tz, notify_midnight, notify_morning, notify_afternoon
+    select id, name, tz, notify_midnight, notify_morning, notify_afternoon, notify_chat
     from players where key_hash = ${hashKey(key)}`;
   return rows[0] ?? null;
 }
