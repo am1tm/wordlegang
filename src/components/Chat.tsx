@@ -45,7 +45,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   const { data, mutate } = useApi<ChatData>(path, { refreshInterval: POLL_MS, dedupingInterval: 2000 });
   const [text, setText] = useState("");
   const [error, setError] = useState("");
-  const bottom = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const lastId = data?.messages.at(-1)?.id;
   const refresh = useRefresh();
   const keyboardStyle = useKeyboardViewport();
@@ -61,7 +61,9 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   }, []);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    // Scroll only the message list. scrollIntoView would also scroll the page on iOS
+    // and shove the whole fixed chat up.
+    if (list.current) list.current.scrollTop = list.current.scrollHeight;
     // Loading the room marked it read on the server; refresh the unread badges.
     if (lastId) refresh((p) => p.startsWith("/api/me") || p.startsWith(`/api/groups/${groupId}?`));
   }, [lastId, refresh, groupId]);
@@ -100,7 +102,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3">
+      <div ref={list} className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-3">
         <p className="pb-1 text-center text-xs text-muted">Today&apos;s trash talk disappears when the next Wordle drops 💨</p>
         {!data && <p className="py-8 text-center text-sm text-muted">Loading…</p>}
         {data?.messages.length === 0 && (
@@ -124,7 +126,6 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
             </div>
           );
         })}
-        <div ref={bottom} />
       </div>
 
       <form
