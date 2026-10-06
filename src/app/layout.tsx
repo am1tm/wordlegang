@@ -10,7 +10,10 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "WordleGang",
   description: "Share your Wordle with your gang and climb the leaderboard.",
-  appleWebApp: { capable: true, title: "WordleGang", statusBarStyle: "black-translucent" },
+  // "black", not "black-translucent": with a translucent status bar, iOS home-screen apps
+  // get a viewport shortened by the status bar but still drawn from the top of the
+  // screen, leaving an undrawable strip at the bottom.
+  appleWebApp: { capable: true, title: "WordleGang", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = {

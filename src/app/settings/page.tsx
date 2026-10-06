@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
+import { ViewportInfo } from "@/components/ViewportInfo";
 import { api, ApiError, getKey, isIOS, isStandalone, setKey, useBrowser, useMe, type Me } from "@/lib/client";
 import { normaliseKey } from "@/lib/ids";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "@/lib/push-client";
@@ -29,6 +30,7 @@ export default function SettingsPage() {
         <NotificationsSection me={me} onSaved={reload} />
         <ShortcutSection />
         <KeySection />
+        <ViewportInfo />
       </div>
     </>
   );

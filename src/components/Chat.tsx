@@ -9,40 +9,31 @@ type ChatData = { puzzle: number; group: { id: string; name: string }; messages:
 
 const POLL_MS = 4000;
 
-// Sizing the chat on iPhone. In home-screen apps with a translucent status bar,
-// iOS's own viewport numbers (100dvh, fixed bottom: 0, visualViewport) can come out
-// short by the status-bar height, leaving a gap under the composer. The physical
-// screen size is exact there, so use it, and switch to the visible viewport only
-// while the on-screen keyboard is up (iOS slides the page instead of resizing it).
+// While the on-screen keyboard is up, iOS slides the page instead of resizing it,
+// so the chat sizes itself to the visible viewport to keep the composer on the keyboard.
 const KEYBOARD_MIN_PX = 150;
 
 function subscribeViewport(cb: () => void) {
   const vv = window.visualViewport;
   vv?.addEventListener("resize", cb);
   vv?.addEventListener("scroll", cb);
-  window.addEventListener("orientationchange", cb);
   return () => {
     vv?.removeEventListener("resize", cb);
     vv?.removeEventListener("scroll", cb);
-    window.removeEventListener("orientationchange", cb);
   };
 }
 
 const viewportSnapshot = () => {
   const vv = window.visualViewport;
-  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-  const screenHeight = matchMedia("(orientation: landscape)").matches ? screen.width : screen.height;
-  const fullHeight = standalone ? screenHeight : window.innerHeight;
-  if (vv && fullHeight - vv.height >= KEYBOARD_MIN_PX) return `kb:${Math.round(vv.height)}:${Math.round(vv.offsetTop)}`;
-  return standalone ? `full:${screenHeight}` : "";
+  if (!vv || window.innerHeight - vv.height < KEYBOARD_MIN_PX) return "";
+  return `${Math.round(vv.height)}:${Math.round(vv.offsetTop)}`;
 };
 
 function useChatViewport() {
   const snap = useSyncExternalStore(subscribeViewport, viewportSnapshot, () => "");
-  const [mode, a, b] = snap.split(":");
-  if (mode === "kb") return { keyboard: true, style: { height: Number(a), bottom: "auto", transform: `translateY(${b}px)` } };
-  if (mode === "full") return { keyboard: false, style: { height: Number(a), bottom: "auto" } };
-  return { keyboard: false, style: undefined };
+  if (!snap) return { keyboard: false, style: undefined };
+  const [height, top] = snap.split(":").map(Number);
+  return { keyboard: true, style: { height, bottom: "auto", transform: `translateY(${top}px)` } };
 }
 
 /** Full-screen Trash talk room: header on top, messages scroll, composer pinned to the bottom. */
