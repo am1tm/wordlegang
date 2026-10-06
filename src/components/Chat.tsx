@@ -9,9 +9,11 @@ type ChatData = { puzzle: number; group: { id: string; name: string }; messages:
 
 const POLL_MS = 4000;
 
-// The visible viewport (shrinks when the on-screen keyboard opens). iOS keeps the
-// layout viewport full height and slides the page instead, which leaves a gap
-// under fixed elements, so the chat sizes itself to this instead of 100dvh.
+// The visible viewport shrinks when the on-screen keyboard opens, but iOS keeps the
+// layout viewport full height and slides the page, leaving the composer hidden or
+// floating. So while the keyboard is up, the chat sizes itself to the visible area.
+// Otherwise it just pins to the screen edges: in iPhone home-screen apps the visual
+// viewport excludes the status bar, so using it then would leave a gap at the bottom.
 function subscribeViewport(cb: () => void) {
   const vv = window.visualViewport;
   vv?.addEventListener("resize", cb);
@@ -21,16 +23,20 @@ function subscribeViewport(cb: () => void) {
     vv?.removeEventListener("scroll", cb);
   };
 }
+const KEYBOARD_MIN_PX = 150;
+
 const viewportSnapshot = () => {
   const vv = window.visualViewport;
-  return vv ? `${Math.round(vv.height)}:${Math.round(vv.offsetTop)}` : "";
+  if (!vv || window.innerHeight - vv.height < KEYBOARD_MIN_PX) return "";
+  return `${Math.round(vv.height)}:${Math.round(vv.offsetTop)}`;
 };
 
-function useVisibleViewport() {
+/** Style for the chat while the keyboard is open, or undefined when it's closed. */
+function useKeyboardViewport() {
   const snap = useSyncExternalStore(subscribeViewport, viewportSnapshot, () => "");
   if (!snap) return undefined;
   const [height, top] = snap.split(":").map(Number);
-  return { height, transform: `translateY(${top}px)` };
+  return { height, bottom: "auto", transform: `translateY(${top}px)` };
 }
 
 /** Full-screen Trash talk room: header on top, messages scroll, composer pinned to the bottom. */
@@ -42,7 +48,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   const bottom = useRef<HTMLDivElement>(null);
   const lastId = data?.messages.at(-1)?.id;
   const refresh = useRefresh();
-  const viewportStyle = useVisibleViewport();
+  const keyboardStyle = useKeyboardViewport();
 
   // Lock the page behind the chat so iOS can't scroll it and open gaps.
   useEffect(() => {
@@ -82,7 +88,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
     // Fixed over the page and sized to the visible viewport, escaping the page padding.
     <div
       className="fixed inset-x-0 top-0 bottom-0 z-40 mx-auto flex max-w-md flex-col bg-bg pt-[env(safe-area-inset-top)]"
-      style={viewportStyle}
+      style={keyboardStyle}
     >
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4">
         <Link href={`/g/${groupId}`} className="-ml-2 rounded-lg px-2 py-1 text-2xl text-muted" aria-label="Back">
@@ -123,7 +129,8 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
 
       <form
         onSubmit={send}
-        className="shrink-0 border-t border-line bg-bg px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"
+        // The keyboard covers the home indicator, so its inset only applies when it's closed.
+        className={`shrink-0 border-t border-line bg-bg px-4 pt-3 ${keyboardStyle ? "pb-3" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}
       >
         {error && <p className="mb-2 text-sm text-danger">{error}</p>}
         <div className="flex gap-2">
