@@ -43,5 +43,12 @@ export const DELETE = handler(async (req: Request, { params }: Ctx) => {
   const player = await requirePlayer(req);
   const group = await requireMembership((await params).id, player.id);
   await sql`delete from memberships where group_id = ${group.id} and player_id = ${player.id}`;
+  if (group.created_by === player.id) {
+    // Hand admin to the longest-standing member so the group always has one.
+    await sql`
+      update groups set created_by = coalesce(
+        (select player_id from memberships where group_id = ${group.id} order by joined_at limit 1), created_by)
+      where id = ${group.id}`;
+  }
   return Response.json({ ok: true });
 });

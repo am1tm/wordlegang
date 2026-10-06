@@ -7,7 +7,15 @@ export async function joinGroupByCode(playerId: string, rawCode: string) {
   const rows = await sql<{ id: string; name: string }>`select id, name from groups where invite_code = ${code}`;
   const group = rows[0];
   if (!group) throw new HttpError(404, "That invite code doesn't match any group");
+  const banned = await sql`select 1 from group_bans where group_id = ${group.id} and player_id = ${playerId}`;
+  if (banned.length) throw new HttpError(403, `You were removed from ${group.name}`);
   await sql`insert into memberships (group_id, player_id) values (${group.id}, ${playerId}) on conflict do nothing`;
+  return group;
+}
+
+export async function requireAdmin(groupId: string, playerId: string) {
+  const group = await requireMembership(groupId, playerId);
+  if (group.created_by !== playerId) throw new HttpError(403, "Only the group admin can do that");
   return group;
 }
 

@@ -313,6 +313,7 @@ function GroupMenu({ board, onChange, onLeft }: { board: Board; onChange: () => 
           🔄 New invite code (old link stops working)
         </button>
       )}
+      <Members groupId={board.group.id} onChange={onChange} />
       {confirmLeave ? (
         <button
           className="btn w-full bg-danger text-white"
@@ -328,6 +329,81 @@ function GroupMenu({ board, onChange, onLeft }: { board: Board; onChange: () => 
           Leave group
         </button>
       )}
+    </div>
+  );
+}
+
+type MemberList = {
+  isAdmin: boolean;
+  members: { id: string; name: string; admin: boolean; me: boolean }[];
+  removed: { id: string; name: string }[];
+};
+
+/** Member list; the admin can remove people (blocks rejoining) and let them back in. */
+function Members({ groupId, onChange }: { groupId: string; onChange: () => void }) {
+  const { data, mutate } = useApi<MemberList>(`/api/groups/${groupId}/members`);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function act(playerId: string, method: "DELETE" | "POST") {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/groups/${groupId}/members/${playerId}`, { method });
+      setConfirm(null);
+      await mutate();
+      onChange();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!data) return null;
+  return (
+    <div className="space-y-1 rounded-xl bg-surface-2 px-4 py-3">
+      <p className="label mb-2">Members ({data.members.length})</p>
+      {data.members.map((m) => (
+        <div key={m.id} className="flex min-h-10 items-center justify-between gap-3">
+          <span className="truncate">
+            {m.name}
+            {m.me && <span className="text-muted"> (you)</span>}
+            {m.admin && <span className="ml-2 text-xs text-near">👑 admin</span>}
+          </span>
+          {data.isAdmin &&
+            !m.me &&
+            (confirm === m.id ? (
+              <button
+                className="shrink-0 rounded-lg bg-danger px-3 py-1.5 text-sm font-semibold text-white"
+                disabled={busy}
+                onClick={() => act(m.id, "DELETE")}
+              >
+                Tap to remove
+              </button>
+            ) : (
+              <button className="shrink-0 px-2 py-1.5 text-sm text-danger" onClick={() => setConfirm(m.id)}>
+                Remove
+              </button>
+            ))}
+        </div>
+      ))}
+      {data.isAdmin && data.removed.length > 0 && (
+        <>
+          <p className="label mb-1 mt-3">Removed</p>
+          {data.removed.map((m) => (
+            <div key={m.id} className="flex min-h-10 items-center justify-between gap-3 text-muted">
+              <span className="truncate">{m.name}</span>
+              <button className="shrink-0 px-2 py-1.5 text-sm text-near" disabled={busy} onClick={() => act(m.id, "POST")}>
+                Let back in
+              </button>
+            </div>
+          ))}
+          <p className="text-xs text-muted">Let back in means they can rejoin with the invite link.</p>
+        </>
+      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }
