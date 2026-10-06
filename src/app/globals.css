@@ -1,26 +1,60 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #121213;
+  --surface: #1a1a1b;
+  --surface-2: #232325;
+  --line: #3a3a3c;
+  --fg: #f4f4f5;
+  --muted: #8b8b90;
+  --hit: #538d4e;
+  --near: #b59f3b;
+  --miss: #3a3a3c;
+  --danger: #e5484d;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-hit: var(--hit);
+  --color-near: var(--near);
+  --color-miss: var(--miss);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition active:scale-[0.98] disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-hit text-white;
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-surface text-fg;
+}
+@utility card {
+  @apply rounded-2xl border border-line bg-surface p-4;
+}
+@utility input {
+  @apply w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-fg outline-none placeholder:text-muted focus:border-muted;
+}
+@utility label {
+  @apply text-xs font-semibold uppercase tracking-wider text-muted;
 }

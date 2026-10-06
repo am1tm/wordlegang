@@ -1,0 +1,270 @@
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { Grid, HiddenGrid } from "@/components/Grid";
+import { Header } from "@/components/Header";
+import { Spinner } from "@/components/Spinner";
+import { api, ApiError, inviteUrl, todayPuzzle } from "@/lib/client";
+import { FAIL_SCORE, scoreLabel } from "@/lib/wordle";
+
+type Stats = {
+  id: string;
+  name: string;
+  played: number;
+  wins: number;
+  points: number;
+  avg: number | null;
+  currentStreak: number;
+  maxStreak: number;
+  distribution: number[];
+};
+
+type Board = {
+  group: { id: string; name: string; invite_code: string; isOwner: boolean };
+  today: number;
+  viewerPlayedToday: boolean;
+  todayEntries: { id: string; name: string; score: number | null; hard: boolean; grid: string | null }[];
+  stats: { week: Stats[]; month: Stats[]; all: Stats[] };
+};
+
+const TABS = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "7 days" },
+  { id: "month", label: "30 days" },
+  { id: "all", label: "All time" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+export default function GroupPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [board, setBoard] = useState<Board | null>(null);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState<Tab>("today");
+  const [menu, setMenu] = useState(false);
+
+  const load = useCallback(
+    () =>
+      api<Board>(`/api/groups/${id}?today=${todayPuzzle()}`).then(setBoard, (err) => {
+        if (err instanceof ApiError && err.status === 401) router.replace("/");
+        else setError((err as Error).message);
+      }),
+    [id, router],
+  );
+
+  useEffect(() => {
+    load();
+    const onFocus = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onFocus);
+    return () => document.removeEventListener("visibilitychange", onFocus);
+  }, [load]);
+
+  if (error) {
+    return (
+      <>
+        <Header back="/" />
+        <p className="text-muted">{error}</p>
+      </>
+    );
+  }
+  if (!board) return <Spinner />;
+
+  return (
+    <>
+      <Header
+        back="/"
+        title={board.group.name}
+        right={
+          <button className="rounded-lg p-2 text-xl text-muted" onClick={() => setMenu(!menu)} aria-label="Group menu">
+            ⋯
+          </button>
+        }
+      />
+
+      {menu && <GroupMenu board={board} onChange={load} onLeft={() => router.replace("/")} />}
+
+      <InviteCard code={board.group.invite_code} name={board.group.name} />
+
+      <nav className="mb-4 grid grid-cols-4 gap-1 rounded-xl bg-surface p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`rounded-lg py-2 text-sm font-semibold ${tab === t.id ? "bg-surface-2 text-fg" : "text-muted"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "today" ? <Today board={board} /> : <Leaderboard rows={board.stats[tab]} />}
+    </>
+  );
+}
+
+function Today({ board }: { board: Board }) {
+  const played = board.todayEntries.filter((e) => e.score !== null);
+  const waiting = board.todayEntries.filter((e) => e.score === null);
+  return (
+    <div className="space-y-3">
+      <p className="label">Wordle {board.today.toLocaleString("en-US")}</p>
+      {!board.viewerPlayedToday && played.length > 0 && (
+        <p className="text-sm text-muted">Grids are hidden until you post your own result.</p>
+      )}
+      {played.length === 0 && <p className="text-sm text-muted">Nobody has posted today yet.</p>}
+      {played.map((e, i) => (
+        <div key={e.id} className="card flex items-center gap-4">
+          <span className="w-6 text-center text-lg font-bold text-muted">{medal(i, e.score!, played)}</span>
+          <div className="flex-1">
+            <p className="font-semibold">{e.name}</p>
+            <p className={`text-2xl font-bold ${e.score === FAIL_SCORE ? "text-danger" : ""}`}>
+              {scoreLabel(e.score!)}/6{e.hard && <span className="text-near">*</span>}
+            </p>
+          </div>
+          {e.grid ? <Grid grid={e.grid} /> : <HiddenGrid rows={e.score === FAIL_SCORE ? 6 : e.score!} />}
+        </div>
+      ))}
+      {waiting.length > 0 && (
+        <div className="pt-2">
+          <p className="label mb-2">Still to play</p>
+          <div className="flex flex-wrap gap-2">
+            {waiting.map((e) => (
+              <span key={e.id} className="rounded-full border border-line px-3 py-1 text-sm text-muted">
+                {e.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function medal(index: number, score: number, played: { score: number | null }[]) {
+  if (score === FAIL_SCORE) return "💀";
+  const rank = played.findIndex((p) => p.score === score); // ties share a medal
+  return ["🥇", "🥈", "🥉"][rank] ?? String(index + 1);
+}
+
+function Leaderboard({ rows }: { rows: Stats[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (rows.every((r) => r.played === 0)) return <p className="text-sm text-muted">No games in this period yet.</p>;
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[2rem_1fr_3.5rem_3rem_3rem] px-4 text-xs font-semibold uppercase tracking-wider text-muted">
+        <span>#</span>
+        <span>Player</span>
+        <span className="text-right">Pts</span>
+        <span className="text-right">Avg</span>
+        <span className="text-right">🔥</span>
+      </div>
+      {rows.map((r, i) => (
+        <button
+          key={r.id}
+          onClick={() => setOpen(open === r.id ? null : r.id)}
+          className="card block w-full py-3 text-left active:bg-surface-2"
+        >
+          <div className="grid grid-cols-[2rem_1fr_3.5rem_3rem_3rem] items-center">
+            <span className="font-bold text-muted">{["🥇", "🥈", "🥉"][i] ?? i + 1}</span>
+            <span className="truncate font-semibold">{r.name}</span>
+            <span className="text-right text-lg font-bold">{r.points}</span>
+            <span className="text-right text-muted">{r.avg ? r.avg.toFixed(2) : "–"}</span>
+            <span className="text-right text-muted">{r.currentStreak}</span>
+          </div>
+          {open === r.id && <Distribution stats={r} />}
+        </button>
+      ))}
+      <p className="px-1 pt-2 text-xs text-muted">
+        Points: 1 guess = 6 pts down to 6 guesses = 1 pt. Fails and missed days score 0. Avg counts a fail as 7. Tap a
+        player for details.
+      </p>
+    </div>
+  );
+}
+
+function Distribution({ stats }: { stats: Stats }) {
+  const max = Math.max(1, ...stats.distribution);
+  return (
+    <div className="mt-3 space-y-1 border-t border-line pt-3">
+      <p className="mb-2 text-xs text-muted">
+        {stats.played} played · {stats.played ? Math.round((stats.wins / stats.played) * 100) : 0}% won · best streak{" "}
+        {stats.maxStreak}
+      </p>
+      {stats.distribution.map((n, i) => (
+        <div key={i} className="flex items-center gap-2 text-xs">
+          <span className="w-3 text-muted">{i === 6 ? "X" : i + 1}</span>
+          <div
+            className={`flex h-5 items-center justify-end rounded px-1.5 font-semibold ${i === 6 ? "bg-danger/70" : "bg-hit"}`}
+            style={{ width: `${Math.max(8, (n / max) * 100)}%`, opacity: n ? 1 : 0.35 }}
+          >
+            {n}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InviteCard({ code, name }: { code: string; name: string }) {
+  const [copied, setCopied] = useState(false);
+  async function share() {
+    const url = inviteUrl(code);
+    const text = `Join "${name}" on WordleGang and post your daily Wordle 🟩`;
+    if (navigator.share) {
+      try {
+        return await navigator.share({ title: "WordleGang", text, url });
+      } catch {
+        return;
+      }
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div className="card mb-4 flex items-center justify-between gap-3">
+      <div>
+        <p className="label">Invite code</p>
+        <p className="font-mono text-lg tracking-widest">{code}</p>
+      </div>
+      <button className="btn-primary px-5" onClick={share}>
+        {copied ? "Copied ✓" : "Invite"}
+      </button>
+    </div>
+  );
+}
+
+function GroupMenu({ board, onChange, onLeft }: { board: Board; onChange: () => void; onLeft: () => void }) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  return (
+    <div className="card mb-4 space-y-2">
+      {board.group.isOwner && (
+        <button
+          className="btn-ghost w-full"
+          onClick={async () => {
+            await api(`/api/groups/${board.group.id}`, { method: "PATCH", json: { rotateInvite: true } });
+            onChange();
+          }}
+        >
+          🔄 New invite code (old link stops working)
+        </button>
+      )}
+      {confirmLeave ? (
+        <button
+          className="btn w-full bg-danger text-white"
+          onClick={async () => {
+            await api(`/api/groups/${board.group.id}`, { method: "DELETE" });
+            onLeft();
+          }}
+        >
+          Tap again to leave {board.group.name}
+        </button>
+      ) : (
+        <button className="btn-ghost w-full text-danger" onClick={() => setConfirmLeave(true)}>
+          Leave group
+        </button>
+      )}
+    </div>
+  );
+}
