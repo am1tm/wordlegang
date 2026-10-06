@@ -9,34 +9,40 @@ type ChatData = { puzzle: number; group: { id: string; name: string }; messages:
 
 const POLL_MS = 4000;
 
-// The visible viewport shrinks when the on-screen keyboard opens, but iOS keeps the
-// layout viewport full height and slides the page, leaving the composer hidden or
-// floating. So while the keyboard is up, the chat sizes itself to the visible area.
-// Otherwise it just pins to the screen edges: in iPhone home-screen apps the visual
-// viewport excludes the status bar, so using it then would leave a gap at the bottom.
+// Sizing the chat on iPhone. In home-screen apps with a translucent status bar,
+// iOS's own viewport numbers (100dvh, fixed bottom: 0, visualViewport) can come out
+// short by the status-bar height, leaving a gap under the composer. The physical
+// screen size is exact there, so use it, and switch to the visible viewport only
+// while the on-screen keyboard is up (iOS slides the page instead of resizing it).
+const KEYBOARD_MIN_PX = 150;
+
 function subscribeViewport(cb: () => void) {
   const vv = window.visualViewport;
   vv?.addEventListener("resize", cb);
   vv?.addEventListener("scroll", cb);
+  window.addEventListener("orientationchange", cb);
   return () => {
     vv?.removeEventListener("resize", cb);
     vv?.removeEventListener("scroll", cb);
+    window.removeEventListener("orientationchange", cb);
   };
 }
-const KEYBOARD_MIN_PX = 150;
 
 const viewportSnapshot = () => {
   const vv = window.visualViewport;
-  if (!vv || window.innerHeight - vv.height < KEYBOARD_MIN_PX) return "";
-  return `${Math.round(vv.height)}:${Math.round(vv.offsetTop)}`;
+  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const screenHeight = matchMedia("(orientation: landscape)").matches ? screen.width : screen.height;
+  const fullHeight = standalone ? screenHeight : window.innerHeight;
+  if (vv && fullHeight - vv.height >= KEYBOARD_MIN_PX) return `kb:${Math.round(vv.height)}:${Math.round(vv.offsetTop)}`;
+  return standalone ? `full:${screenHeight}` : "";
 };
 
-/** Style for the chat while the keyboard is open, or undefined when it's closed. */
-function useKeyboardViewport() {
+function useChatViewport() {
   const snap = useSyncExternalStore(subscribeViewport, viewportSnapshot, () => "");
-  if (!snap) return undefined;
-  const [height, top] = snap.split(":").map(Number);
-  return { height, bottom: "auto", transform: `translateY(${top}px)` };
+  const [mode, a, b] = snap.split(":");
+  if (mode === "kb") return { keyboard: true, style: { height: Number(a), bottom: "auto", transform: `translateY(${b}px)` } };
+  if (mode === "full") return { keyboard: false, style: { height: Number(a), bottom: "auto" } };
+  return { keyboard: false, style: undefined };
 }
 
 /** Full-screen Trash talk room: header on top, messages scroll, composer pinned to the bottom. */
@@ -48,17 +54,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
   const list = useRef<HTMLDivElement>(null);
   const lastId = data?.messages.at(-1)?.id;
   const refresh = useRefresh();
-  const keyboardStyle = useKeyboardViewport();
-
-  // Lock the page behind the chat so iOS can't scroll it and open gaps.
-  useEffect(() => {
-    const html = document.documentElement;
-    const prev = html.style.overflow;
-    html.style.overflow = "hidden";
-    return () => {
-      html.style.overflow = prev;
-    };
-  }, []);
+  const viewport = useChatViewport();
 
   useEffect(() => {
     // Scroll only the message list. scrollIntoView would also scroll the page on iOS
@@ -90,7 +86,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
     // Fixed over the page and sized to the visible viewport, escaping the page padding.
     <div
       className="fixed inset-x-0 top-0 bottom-0 z-40 mx-auto flex max-w-md flex-col bg-bg pt-[env(safe-area-inset-top)]"
-      style={keyboardStyle}
+      style={viewport.style}
     >
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4">
         <Link href={`/g/${groupId}`} className="-ml-2 rounded-lg px-2 py-1 text-2xl text-muted" aria-label="Back">
@@ -131,7 +127,7 @@ export function Chat({ groupId, today }: { groupId: string; today: number }) {
       <form
         onSubmit={send}
         // The keyboard covers the home indicator, so its inset only applies when it's closed.
-        className={`shrink-0 border-t border-line bg-bg px-4 pt-3 ${keyboardStyle ? "pb-3" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}
+        className={`shrink-0 border-t border-line bg-bg px-4 pt-3 ${viewport.keyboard ? "pb-3" : "pb-[max(0.75rem,env(safe-area-inset-bottom))]"}`}
       >
         {error && <p className="mb-2 text-sm text-danger">{error}</p>}
         <div className="flex gap-2">
